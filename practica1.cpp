@@ -1,34 +1,53 @@
-// practica1.cpp : Defines the entry point for the console application.
-//
-
-#include "stdio.h"
-#include "conio.h"
-#include "windows.h"
+#include <stdio.h>
+#include <conio.h>
+#include <windows.h>
+#include <list>
 
 #define ESC        27
 #define MOVE_LEFT  'j'
 #define MOVE_RIGHT 'k'
 #define FIRE_LEFT  'h'
 #define FIRE_RIGHT 'l'
+#define WIDTH      50
+#define T_ENEMY    30
+#define T_MUSHROOM 100
 
 void checkCollisions();
 
-int character = 50;
-int bullet    = -1;
-int bulletDir = 0;
-int enemy     = -1;
-int enemyDir  = 0;
-int mushroom  = -1;
-int points    = 0;
-int lives     = 3;
+struct bullet {
+	int pos;
+	int dir;
+};
+
+struct enemy {
+	int pos;
+	int dir;
+};
+
+int g_character = (WIDTH / 2) - 1;
+int g_mushroom  = -1;
+int g_points    = 0;
+int g_lives     = 3;
+
+std::list<bullet> bullets;
+std::list<enemy> enemies;
 
 int main()
 {
+	//hide cursor
+	HANDLE consoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	CONSOLE_CURSOR_INFO info;
+	info.dwSize = 0;
+	info.bVisible = FALSE;
+	SetConsoleCursorInfo(consoleHandle, &info);
+
+	int enemyTimer    = T_ENEMY;
+	int mushroomTimer = T_MUSHROOM;
+
 	printf("\n\n\n\n");
+
 	char key = NULL;
-
-	while (key != ESC) {
-
+	while (key != ESC && g_lives >= 0) {
 		//check input
 		key = NULL;
 		if (_kbhit()) {
@@ -37,136 +56,160 @@ int main()
 
 		//process input
 		switch (key) {
-		case MOVE_LEFT:
-			character--;
-			if (character < 0) {
-				character = 0;
-			}
-			break;
-
-		case MOVE_RIGHT:
-			character++;
-			if (character > 99) {
-				character = 99;
-			}
-			break;
-
-		case FIRE_LEFT:
-			if (bullet == -1) {
-				bullet = character - 1;
-				bulletDir = -1;
-			}
-			break;
-
-		case FIRE_RIGHT:
-			if (bullet == -1) {
-				bullet = character + 1;
-				bulletDir = 1;
-			}
-			break;
+			case MOVE_LEFT :g_character--; if (g_character < 0) g_character = 0;          break;
+			case MOVE_RIGHT:g_character++; if (g_character > WIDTH) g_character = WIDTH;  break;
+			case FIRE_LEFT :bullets.push_back(bullet{ g_character -1, -1});               break;
+			case FIRE_RIGHT:bullets.push_back(bullet{ g_character +1,  1});               break;
 		}
-
-		//check collisions
 		checkCollisions();
 
-		//move enemy
-		enemy += enemyDir;
-
-		//check collisions
-		checkCollisions();
-
-		//move bullet
-		bullet += bulletDir;
-
-		//check collisions
+		//move bullets
+		for (auto it = bullets.begin(); it != bullets.end(); ++it)
+		{
+			it->pos += it->dir;
+		}
 		checkCollisions();
 			
-		//enemy generation
-		if (enemy == -1) {
-			if (rand() % 2) {
-				enemy = 0;
-				enemyDir = 1;
-			}
-			else {
-				enemy = 99;
-				enemyDir = -1;
-			}
+		//enemy movement and generation
+		for (auto it = enemies.begin(); it != enemies.end(); ++it)
+		{
+			it->pos += it->dir;
 		}
 
+		if (enemyTimer == 0) {
+			if (rand() % 2) {
+				enemies.push_back(enemy{0, 1});
+			}
+			else {
+				enemies.push_back(enemy{WIDTH, -1});
+			}
+			enemyTimer = T_ENEMY;
+		}
+		else {
+			enemyTimer--;
+		}
+		checkCollisions();
+
 		//mushroom generation
-		if (mushroom == -1) {
-			mushroom = rand() % 100;
+		if (g_mushroom == -1) {
+			if (mushroomTimer == 0) {
+				g_mushroom = rand() % WIDTH;
+				mushroomTimer = T_MUSHROOM;
+			}
+			else {
+				mushroomTimer--;
+			}
 		}
 
 		//Pintado
-		printf("L: %d ", lives);
-		for (unsigned int i = 0; i < 100; i++) {
+		printf("L: %d ", g_lives);
+		for (unsigned int i = 0; i <= WIDTH; i++) {
+			char *toDraw = "_";
+
+			for (auto it = bullets.begin(); it != bullets.end(); ++it)
+			{
+				if (it->pos == i) {
+					if (it->dir == -1) {
+						toDraw = "<";
+					}
+					else {
+						toDraw = ">";
+					}
+				}
+			}
+
+			for (auto it = enemies.begin(); it != enemies.end(); ++it)
+			{
+				if (it->pos == i) {
+					toDraw = "@";
+				}
+			}
+
+			if (i == g_character) {
+				toDraw = "X";
+			}
 			
-			if (i == character) {
-				printf("X");
+			if (i == g_mushroom) {
+				toDraw = "T";
 			}
-			else if (i == bullet) {
-				if (bulletDir == -1) {
-					printf("<");
-				}
-				else {
-					printf(">");
-				}
-			}
-			else if (i == enemy) {
-				printf("@");
-			}
-			else if (i == mushroom) {
-				printf("T");
-			}
-			else {
-				printf("_");
-			}
+
+			printf("%s", toDraw);
 		}
-		printf(" P: %d", points);
+
+		printf(" P: %d", g_points);
 		printf("\r");
 
 		Sleep(50);
 	}
+
+	if (g_lives < 0) {
+		printf("GAME OVER");
+		getchar();
+	}
+
     return 0;
 }
 
 void checkCollisions()
 {
-	//check if bullet killed enemy
-	if (bullet == enemy) {
-		enemy = -1;
-		enemyDir = 0;
-		bullet = -1;
-		bulletDir = 0;
-	}
-
-	//check if enemy killed character
-	if (enemy == character) {
-		enemy = -1;
-		enemyDir = 0;
-		bullet = -1;
-		bulletDir = 0;
-		character = 50;
-
-		//decrease life
-		lives--;
-		if (lives >= 0) {
-			character = 50;
+	auto itBullets = bullets.begin();
+	while (itBullets != bullets.end()) {
+		//check if bullet is out of screen
+		if (itBullets->pos > WIDTH || itBullets->pos < 0) {
+			itBullets = bullets.erase(itBullets);
 		}
 		else {
-			character = -1;
+			//check if bullet hits enemy
+			auto itEnemies = enemies.begin();
+			bool hit = false;
+			while (!hit && itEnemies != enemies.end()) {
+				if (itBullets->pos == itEnemies->pos) {
+					hit = true;
+					enemies.erase(itEnemies);
+
+				}
+				else {
+					itEnemies++;
+				}
+			}
+
+			if (hit) {
+				itBullets = bullets.erase(itBullets);
+			}
+			else {
+				itBullets++;
+			}
+		}
+	}
+
+	auto itEnemies = enemies.begin();
+	while (itEnemies != enemies.end()) {
+		//check if enemy is out of screen
+		if (itEnemies->pos > WIDTH || itEnemies->pos < 0) {
+			itEnemies = enemies.erase(itEnemies);
+		}
+		else {
+			//check if enemy hits character
+			if (g_character == itEnemies->pos) {
+				//decrease life and reset
+				g_lives--;
+				g_character = (WIDTH / 2) - 1;
+				enemies.clear();
+				bullets.clear();
+				g_mushroom = -1;
+				break;
+			}
+			//check if enemy hits mushroom
+			if (g_mushroom == itEnemies->pos) {
+				g_mushroom = -1;
+			}
+			itEnemies++;
 		}
 	}
 
 	//check if character picked mushroom
-	if (character == mushroom) {
-		mushroom = -1;
-		points += 10;
-	}
-
-	//check if enemy killed mushroom
-	if (enemy == mushroom) {
-		mushroom = -1;
+	if (g_character == g_mushroom) {
+		g_mushroom = -1;
+		g_points += 10;
 	}
 }
